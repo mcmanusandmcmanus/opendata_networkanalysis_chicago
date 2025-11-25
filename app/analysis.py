@@ -189,9 +189,7 @@ class CrimeAnalyzer:
                 "$order": "date DESC",
                 "$select": ",".join(select_cols),
             }
-            # Some endpoints honor $$app_token instead of header only
-            if config.APP_TOKEN:
-                params["$$app_token"] = config.APP_TOKEN
+            # Prefer header-based token; avoid duplicating tokens unless needed
             try:
                 resp = requests.get(config.API_URL, headers=headers, params=params, timeout=30)
                 resp.raise_for_status()
