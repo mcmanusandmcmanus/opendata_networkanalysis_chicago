@@ -1,0 +1,12 @@
+# Data and large artifacts
+data/
+*.csv
+*.parquet
+
+# Environments
+.venv/
+.env
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
