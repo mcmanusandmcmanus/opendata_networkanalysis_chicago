@@ -17,6 +17,7 @@ Offline-first micro SaaS for Chicago crime intelligence: FastAPI backend + stati
 ## Repo Layout
 - `app/` — FastAPI app (`main.py`) and analytics engine (`analysis.py`).
 - `static/` — HTML dashboard and vendor assets (Leaflet, Chart.js). Run `scripts/setup_assets.py` to populate `static/vendor/`.
+- `static/boundaries/` — optional GeoJSON boundaries (e.g., police districts, neighborhoods, tracts) for map overlays; keep files local.
 - `docs/` — data card, prompt recipes, workflow checklist for LLM collaboration.
 - `render.yaml` — Render web service config.
 - `requirements.txt` — pinned Python dependencies.
@@ -24,4 +25,5 @@ Offline-first micro SaaS for Chicago crime intelligence: FastAPI backend + stati
 ## Notes
 - Analysis defaults: haversine DBSCAN eps=0.2 miles, min_samples=5; network links within 0.5 miles & 3 days; node cap 20k; DBSCAN sample cap 500k.
 - Data source: `DATA_SOURCE=local` (default) reads the CSV. `DATA_SOURCE=api` fetches from `API_URL` (default Socrata crimes dataset), limited by `API_LIMIT` (default 100k rows) and `API_YEARS_BACK` (default 3 years), using `app_token`/`secret_key` from env.
+- Boundaries: If you want overlays, convert shapefiles to GeoJSON (WGS84) and place under `static/boundaries/` (e.g., `police_districts.geojson`, `neighborhoods.geojson`, `tracts.geojson`). The UI boundary toggle will pick them up; no external services are called.
 - Outputs are cached per crime type (network) and refreshed via `/api/refresh` or app restart.
