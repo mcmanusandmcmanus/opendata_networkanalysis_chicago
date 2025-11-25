@@ -5,9 +5,17 @@ services:
     buildCommand: "pip install --upgrade pip setuptools wheel && pip install --prefer-binary -r requirements.txt"
     startCommand: "uvicorn app.main:app --host 0.0.0.0 --port 10000"
     envVars:
+      - key: DATA_SOURCE
+        value: "api"
       - key: PYTHON_VERSION
         value: "3.11.7"
       - key: PORT
         value: "10000"
-      - key: CRIME_CSV_PATH
-        value: "/opt/render/project/src/data/chicago_crime_odp_2022_202511.csv"
+      # If falling back to CSV, set CRIME_CSV_PATH to your mounted path
+      # - key: CRIME_CSV_PATH
+      #   value: "/opt/render/project/src/data/chicago_crime_odp_2022_202511.csv"
+      # API credentials (set in Render dashboard, not committed)
+      # - key: app_token
+      #   sync: false
+      # - key: secret_key
+      #   sync: false
