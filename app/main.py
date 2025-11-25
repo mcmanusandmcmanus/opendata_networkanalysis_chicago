@@ -51,7 +51,7 @@ class NetworkData(BaseModel):
 @app.on_event("startup")
 def startup_event():
     if analyzer.df is None:
-        logger.info("Preloading dataset...")
+        logger.info("Preloading dataset (source=%s)...", analyzer.data_source)
         analyzer.load_data()
 
 
@@ -63,6 +63,10 @@ def health_check():
         "data_loaded": loaded,
         "records": len(analyzer.df) if loaded else 0,
         "data_path": str(analyzer.csv_path),
+        "data_source": analyzer.data_source,
+        "last_load_status": analyzer.last_load_status,
+        "last_load_error": analyzer.last_load_error,
+        "last_loaded_at": analyzer.last_loaded_at,
     }
 
 

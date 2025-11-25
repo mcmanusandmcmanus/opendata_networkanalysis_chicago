@@ -23,6 +23,9 @@ class CrimeAnalyzer:
         self.cache: Dict[str, Any] = {}
         self._lock = Lock()
         self.data_source = config.DATA_SOURCE
+        self.last_load_status: str = "not_loaded"
+        self.last_load_error: Optional[str] = None
+        self.last_loaded_at: Optional[str] = None
 
         # Tunable defaults
         self.spatial_radius_miles = config.SPATIAL_RADIUS_MILES
@@ -124,6 +127,8 @@ class CrimeAnalyzer:
             headers["X-App-Token"] = config.APP_TOKEN
         if config.SECRET_KEY:
             headers["Authorization"] = f"Bearer {config.SECRET_KEY}"
+        if config.DATA_SOURCE == "api" and not headers:
+            logger.warning("DATA_SOURCE=api but no app_token/secret_key provided; API may rate-limit or fail.")
 
         # Limit to recent years for performance
         now_year = datetime.utcnow().year
@@ -222,12 +227,21 @@ class CrimeAnalyzer:
                 ok = self._load_from_api()
                 if ok:
                     self._post_load_vector_ops()
+                    self.last_load_status = "ok"
+                    self.last_load_error = None
+                    self.last_loaded_at = datetime.utcnow().isoformat()
                     return True
                 logger.warning("API load failed; falling back to CSV")
             ok = self._load_from_csv()
             if ok:
                 self._post_load_vector_ops()
-            return ok
+                self.last_load_status = "ok"
+                self.last_load_error = None
+                self.last_loaded_at = datetime.utcnow().isoformat()
+                return True
+            self.last_load_status = "error"
+            self.last_load_error = f"Failed to load from {self.data_source}"
+            return False
 
     def _post_load_vector_ops(self):
         if self.df is None or self.df.empty:

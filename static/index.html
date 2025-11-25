@@ -91,6 +91,9 @@
       </header>
 
       <main>
+        <div id="status-banner" style="display:none; margin-bottom:12px;">
+          <div class="card" style="border-left:4px solid var(--warn); color:var(--text); font-size:13px;" id="status-text"></div>
+        </div>
         <section id="view-dashboard">
           <div class="cards">
             <div class="card">
@@ -174,11 +177,30 @@
       await loadHotspots();
     });
 
+    function setStatus(message, tone = "warn") {
+      const banner = document.getElementById("status-banner");
+      const text = document.getElementById("status-text");
+      if (!message) {
+        banner.style.display = "none";
+        text.innerText = "";
+        return;
+      }
+      const colors = { warn: "var(--warn)", danger: "var(--danger)", info: "var(--accent)" };
+      banner.style.display = "block";
+      banner.firstElementChild.style.borderLeftColor = colors[tone] || "var(--warn)";
+      text.innerText = message;
+    }
+
     async function loadSummary() {
       try {
         const res = await fetch("/api/summary");
         if (!res.ok) throw new Error("Summary fetch failed");
         const data = await res.json();
+        if (!data.total_incidents || data.total_incidents === 0) {
+          setStatus("No data loaded. Check DATA_SOURCE, CRIME_CSV_PATH, or API credentials.", "warn");
+        } else {
+          setStatus(null);
+        }
 
         document.getElementById("kpi-total").innerText = data.total_incidents.toLocaleString();
         document.getElementById("kpi-arrest").innerText = (data.arrest_rate * 100).toFixed(1) + "%";
@@ -239,13 +261,17 @@
         });
       } catch (err) {
         console.error(err);
+        setStatus("Summary unavailable. Verify backend health and data load.", "danger");
       }
     }
 
     async function loadHotspots() {
       const type = document.getElementById("crime-select").value;
       const res = await fetch(`/api/hotspots?crime_type=${encodeURIComponent(type)}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        setStatus("Hotspots unavailable. Verify backend and data load.", "danger");
+        return;
+      }
       const data = await res.json();
 
       document.getElementById("kpi-hotspots").innerText = data.length;
@@ -269,6 +295,7 @@
       const res = await fetch(`/api/network?crime_type=${encodeURIComponent(type)}`);
       if (!res.ok) {
         list.innerHTML = "<div style='color:var(--danger);'>Network unavailable.</div>";
+        setStatus("Network analysis unavailable. Verify backend and data load.", "warn");
         return;
       }
       const data = await res.json();
