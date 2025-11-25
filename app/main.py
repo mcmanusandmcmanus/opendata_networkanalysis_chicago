@@ -48,6 +48,15 @@ class NetworkData(BaseModel):
     edges: List[Dict[str, str]]
 
 
+@app.get("/api/choropleth")
+def get_choropleth(level: str = Query("district", description="Boundary level (district supported)")):
+    if level != "district":
+        raise HTTPException(status_code=400, detail="Only district choropleth supported currently.")
+    data = analyzer.build_district_choropleth()
+    if not data:
+        raise HTTPException(status_code=503, detail="Choropleth unavailable (missing data or boundary file).")
+    return data
+
 @app.on_event("startup")
 def startup_event():
     if analyzer.df is None:

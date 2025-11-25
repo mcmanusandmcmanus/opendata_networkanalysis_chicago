@@ -245,6 +245,63 @@ class CrimeAnalyzer:
         self.last_load_error = None
         return True
 
+    # --- Choropleth ---
+    def build_district_choropleth(self, geojson_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Returns a GeoJSON with incident counts/arrest rates joined to police districts.
+        Requires a local GeoJSON with a district property (common keys tried).
+        """
+        if not self._require_data():
+            return {}
+        path = geojson_path or config.DISTRICT_GEOJSON
+        if not path or not os.path.exists(path):
+            logger.warning("District GeoJSON not found at %s", path)
+            return {}
+
+        groups = self.df.groupby("District")
+        counts = groups.size().to_dict()
+        arrests = groups["Arrest"].mean().to_dict()
+
+        # Load GeoJSON
+        try:
+            import json
+
+            with open(path, "r", encoding="utf-8") as f:
+                gj = json.load(f)
+        except Exception as exc:
+            logger.exception("Failed to load district GeoJSON: %s", exc)
+            return {}
+
+        def district_key(props: Dict[str, Any]) -> Optional[str]:
+            for k in ["district", "dist_num", "dist_numbe", "dist", "DISTRICT", "DIST_NUM", "DIST"]:
+                if k in props:
+                    val = props.get(k)
+                    if val is None:
+                        continue
+                    return str(val).lstrip("0")
+            return None
+
+        max_count = max(counts.values()) if counts else 0
+        features = gj.get("features", [])
+        for feat in features:
+            props = feat.get("properties", {})
+            key = district_key(props)
+            if not key:
+                continue
+            feat_counts = counts.get(key) or counts.get(str(int(float(key)))) if key.replace(".", "", 1).isdigit() else counts.get(key)
+            feat_arrest = arrests.get(key) or arrests.get(str(int(float(key)))) if key.replace(".", "", 1).isdigit() else arrests.get(key)
+            props["count"] = int(feat_counts) if feat_counts is not None else 0
+            props["arrest_rate"] = float(feat_arrest) if feat_arrest is not None and not np.isnan(feat_arrest) else 0.0
+            props["district_id"] = key
+            feat["properties"] = props
+
+        gj["metadata"] = {
+            "max_count": max_count,
+            "generated_at": datetime.utcnow().isoformat(),
+            "source": "local" if self.data_source == "local" else "api",
+        }
+        return gj
+
     def load_data(self) -> bool:
         with self._lock:
             self.cache = {}

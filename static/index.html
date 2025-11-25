@@ -375,6 +375,39 @@
         boundaryLayer = null;
       }
       if (type === "none") return;
+
+      // Districts: use API choropleth if available
+      if (type === "districts") {
+        try {
+          const res = await fetch("/api/choropleth?level=district");
+          if (!res.ok) throw new Error("Choropleth unavailable");
+          const data = await res.json();
+          const maxCount = data.metadata?.max_count || 1;
+          boundaryLayer = L.geoJSON(data, {
+            style: feat => {
+              const c = feat.properties?.count || 0;
+              const color = choroplethColor(c, maxCount);
+              return {
+                color: "#0ea5e9",
+                weight: 1,
+                fillColor: color,
+                fillOpacity: 0.45
+              };
+            },
+            onEachFeature: (feature, layer) => {
+              const name = feature.properties?.district_id || feature.properties?.district || "";
+              const c = feature.properties?.count || 0;
+              const ar = feature.properties?.arrest_rate != null ? (feature.properties.arrest_rate * 100).toFixed(1) : "0.0";
+              layer.bindTooltip(`${name || "District"}: ${c} incidents, arrest ${ar}%`, {sticky: true});
+            }
+          }).addTo(mapHotspots);
+        } catch (err) {
+          console.warn("Choropleth load failed:", err);
+          setStatus("Choropleth unavailable. Ensure district GeoJSON exists and data is loaded.", "warn");
+        }
+        return;
+      }
+
       const path = boundaryPaths[type];
       if (!path) return;
       try {
@@ -383,12 +416,12 @@
         const data = await res.json();
         boundaryLayer = L.geoJSON(data, {
           style: {
-            color: type === "districts" ? "#38bdf8" : type === "neighborhoods" ? "#a855f7" : "#22c55e",
+            color: type === "neighborhoods" ? "#a855f7" : "#22c55e",
             weight: 1,
             fillOpacity: 0.05
           },
           onEachFeature: (feature, layer) => {
-            const name = feature.properties?.district || feature.properties?.name || "";
+            const name = feature.properties?.name || "";
             if (name) layer.bindTooltip(name, {sticky: true});
           }
         }).addTo(mapHotspots);
@@ -396,6 +429,16 @@
         console.warn("Boundary load failed:", err);
         setStatus("Boundary layer unavailable. Ensure GeoJSON files exist under /static/boundaries/.", "warn");
       }
+    }
+
+    function choroplethColor(value, max) {
+      if (!max) return "#dbeafe";
+      const t = Math.min(value / max, 1);
+      if (t > 0.75) return "#1d4ed8";
+      if (t > 0.5) return "#2563eb";
+      if (t > 0.25) return "#3b82f6";
+      if (t > 0.1) return "#60a5fa";
+      return "#bfdbfe";
     }
 
     async function loadNetwork() {

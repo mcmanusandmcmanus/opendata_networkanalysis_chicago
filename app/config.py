@@ -43,3 +43,7 @@ PORT = int(os.getenv("PORT", 8000))
 # Paths for static assets
 STATIC_DIR = BASE_DIR / "static"
 VENDOR_DIR = STATIC_DIR / "vendor"
+BOUNDARY_DIR = STATIC_DIR / "boundaries"
+DISTRICT_GEOJSON = BOUNDARY_DIR / "police_districts.geojson"
+NEIGHBORHOOD_GEOJSON = BOUNDARY_DIR / "neighborhoods.geojson"
+TRACT_GEOJSON = BOUNDARY_DIR / "tracts.geojson"
