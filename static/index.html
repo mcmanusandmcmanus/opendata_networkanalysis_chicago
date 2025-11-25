@@ -158,6 +158,32 @@
               <div id="network-list" class="list"></div>
             </div>
           </div>
+          <div class="grid" style="margin-top:16px; gap:16px;">
+            <div class="card">
+              <div class="section-title">How to Read the Network</div>
+              <div style="font-size:13px; color:var(--muted); line-height:1.5;">
+                <p><strong>Nodes</strong> are incidents. <strong>Edges</strong> connect pairs within 0.5 miles and 3 days for the selected crime type. Components = potential series.</p>
+                <p><strong>When to act:</strong> Large components (biggest series) indicate an active pattern; target those geographies/time windows first. High edges-to-nodes suggest tight clustering. Many small components = dispersed small series; monitor for growth.</p>
+                <p><strong>Cross-check:</strong> If the largest component overlaps hotspots, prioritize deployment there. Low arrest rate + large component = enforcement gap.</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="section-title">Methodology (Network & Hotspots)</div>
+              <div style="font-size:13px; color:var(--muted); line-height:1.5;">
+                <p><strong>Hotspots:</strong> Haversine DBSCAN (eps≈0.2 miles, min_samples=5) on lat/long with sampling cap for performance. Radius shown is an approximate spread of the cluster.</p>
+                <p><strong>Network:</strong> Incidents linked if within 0.5 miles and 3 days. We keep up to 20k most recent incidents per crime type; show up to the 10 largest components.</p>
+                <p><strong>Scope:</strong> Defaults to API pull (Socrata crimes) limited by env vars (API_LIMIT, API_YEARS_BACK). Data quality depends on source timestamps/coords.</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="section-title">About the Data</div>
+              <div style="font-size:13px; color:var(--muted); line-height:1.5;">
+                <p>Source: Chicago crimes dataset (API or local CSV). Fields include incident date/time (local), location (masked block, lat/long), primary type, arrest/domestic flags, and police geography.</p>
+                <p>Assumptions: Timestamps parsed in local time; booleans normalized; rows missing date/coords dropped. Hotspots and networks use coordinates as provided; Blocks are coarse for privacy.</p>
+                <p>Limitations: API throttling or env limits may restrict history; if <span style="color:var(--warn);">records are low</span>, check DATA_SOURCE, API credentials, and year/limit settings.</p>
+              </div>
+            </div>
+          </div>
         </section>
       </main>
     </div>
