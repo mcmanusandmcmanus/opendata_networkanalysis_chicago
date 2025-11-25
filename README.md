@@ -24,6 +24,6 @@ Offline-first micro SaaS for Chicago crime intelligence: FastAPI backend + stati
 
 ## Notes
 - Analysis defaults: haversine DBSCAN eps=0.2 miles, min_samples=5; network links within 0.5 miles & 3 days; node cap 20k; DBSCAN sample cap 500k.
-- Data source: `DATA_SOURCE=api` by default (Socrata crimes endpoint). Env limits: `API_LIMIT` defaults to 15k rows (to fit low-RAM tiers), `API_YEARS_BACK` defaults to 2 years. Set `app_token`/`secret_key` in env. For local files, set `DATA_SOURCE=local` and `CRIME_CSV_PATH` to your CSV.
+- Data source: `DATA_SOURCE=api` by default (Socrata crimes endpoint). Env limits: `API_LIMIT` defaults to 200k rows (aimed at ~2GB RAM), `API_YEARS_BACK` defaults to 4 years to capture current-year data. Set `app_token`/`secret_key` in env. For local files, set `DATA_SOURCE=local` and `CRIME_CSV_PATH` to your CSV.
 - Boundaries: If you want overlays, convert shapefiles to GeoJSON (WGS84) and place under `static/boundaries/` (e.g., `police_districts.geojson`, `neighborhoods.geojson`, `tracts.geojson`). The UI boundary toggle will pick them up; no external services are called.
 - Outputs are cached per crime type (network) and refreshed via `/api/refresh` or app restart.
