@@ -25,8 +25,8 @@ API_URL = os.getenv(
 )
 API_LIMIT = int(os.getenv("API_LIMIT", 200_000))  # max rows to pull per refresh (safe for ~2GB RAM)
 API_YEARS_BACK = int(os.getenv("API_YEARS_BACK", 4))  # limit by recent years for coverage (e.g., up to current year)
-APP_TOKEN = os.getenv("app_token")
-SECRET_KEY = os.getenv("secret_key")
+APP_TOKEN = os.getenv("app_token") or os.getenv("APP_TOKEN")
+SECRET_KEY = os.getenv("secret_key") or os.getenv("SECRET_KEY")
 
 # Analysis defaults
 SPATIAL_RADIUS_MILES = float(os.getenv("SPATIAL_RADIUS_MILES", 0.5))

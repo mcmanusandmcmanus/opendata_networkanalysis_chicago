@@ -130,16 +130,35 @@ class CrimeAnalyzer:
         if config.DATA_SOURCE == "api" and not headers:
             logger.warning("DATA_SOURCE=api but no app_token/secret_key provided; API may rate-limit or fail.")
 
-        # Limit to recent years for performance
-        now_year = datetime.utcnow().year
-        start_year = now_year - config.API_YEARS_BACK + 1
-        where_clause = f"year >= {start_year}"
+        # Recent-first window
+        years_back = max(config.API_YEARS_BACK, 1)
+        start_date = (pd.Timestamp.utcnow() - pd.DateOffset(years=years_back)).strftime("%Y-%m-%dT00:00:00")
 
         limit = min(config.API_LIMIT, 1_000_000)
         batch_size = 50_000
         frames: List[pd.DataFrame] = []
         offset = 0
 
+        # Only pull needed columns for RAM efficiency
+        select_cols = [
+            "id",
+            "case_number",
+            "date",
+            "block",
+            "iucr",
+            "primary_type",
+            "description",
+            "location_description",
+            "arrest",
+            "domestic",
+            "beat",
+            "district",
+            "ward",
+            "community_area",
+            "fbi_code",
+            "latitude",
+            "longitude",
+        ]
         field_map = {
             "id": "ID",
             "case_number": "Case Number",
@@ -156,20 +175,17 @@ class CrimeAnalyzer:
             "ward": "Ward",
             "community_area": "Community Area",
             "fbi_code": "FBI Code",
-            "x_coordinate": "X Coordinate",
-            "y_coordinate": "Y Coordinate",
-            "year": "Year",
-            "updated_on": "Updated On",
             "latitude": "Latitude",
             "longitude": "Longitude",
-            "location": "Location",
         }
 
         while offset < limit:
             params = {
-                "$limit": batch_size,
+                "$limit": min(batch_size, limit - offset),
                 "$offset": offset,
-                "$where": where_clause,
+                "$where": f"date > '{start_date}'",
+                "$order": "date DESC",
+                "$select": ",".join(select_cols),
             }
             try:
                 resp = requests.get(config.API_URL, headers=headers, params=params, timeout=30)
@@ -186,29 +202,29 @@ class CrimeAnalyzer:
             if df.empty:
                 break
 
-            # Rename to internal schema
             df = df.rename(columns=field_map)
-            # Keep only known columns
-            df = df[[v for v in field_map.values() if v in df.columns]]
-            # Parse datetimes
+
+            # Parse datetimes and downcast
             if "Date" in df.columns:
                 df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-            if "Updated On" in df.columns:
-                df["Updated On"] = pd.to_datetime(df["Updated On"], errors="coerce")
-            # Coerce numerics
-            for col in ["Latitude", "Longitude", "X Coordinate", "Y Coordinate"]:
+                df["Year"] = df["Date"].dt.year.astype("Int64")
+            for col in ["Latitude", "Longitude"]:
                 if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors="coerce")
+                    df[col] = pd.to_numeric(df[col], errors="coerce").astype("float32")
             # Booleans
             for col in ["Arrest", "Domestic"]:
                 if col in df.columns:
                     df[col] = df[col].astype("string").str.lower().map({"true": True, "false": False})
+            # Categories for repetitive text
+            for col in ["Primary Type", "Description", "Location Description", "Beat", "District", "Ward", "Community Area", "FBI Code"]:
+                if col in df.columns:
+                    df[col] = df[col].astype("category")
 
             df = df.dropna(subset=["Date", "Latitude", "Longitude"])
             if not df.empty:
                 frames.append(df)
 
-            offset += batch_size
+            offset += params["$limit"]
             if offset >= limit:
                 break
 
