@@ -57,7 +57,7 @@ def startup_event():
 
 @app.get("/health")
 def health_check():
-    loaded = analyzer.df is not None and analyzer.df is not None and not analyzer.df.empty
+    loaded = analyzer.df is not None and not analyzer.df.empty
     return {
         "status": "online",
         "data_loaded": loaded,
