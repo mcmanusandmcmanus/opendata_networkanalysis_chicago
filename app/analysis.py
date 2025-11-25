@@ -179,6 +179,8 @@ class CrimeAnalyzer:
             "longitude": "Longitude",
         }
 
+        last_error = None
+
         while offset < limit:
             params = {
                 "$limit": min(batch_size, limit - offset),
@@ -187,15 +189,22 @@ class CrimeAnalyzer:
                 "$order": "date DESC",
                 "$select": ",".join(select_cols),
             }
+            # Some endpoints honor $$app_token instead of header only
+            if config.APP_TOKEN:
+                params["$$app_token"] = config.APP_TOKEN
             try:
                 resp = requests.get(config.API_URL, headers=headers, params=params, timeout=30)
                 resp.raise_for_status()
                 data = resp.json()
             except Exception as exc:
+                last_error = str(exc)
                 logger.exception("API fetch failed at offset %s: %s", offset, exc)
                 break
 
             if not data:
+                # If we haven't pulled anything, keep note
+                if offset == 0:
+                    last_error = "API returned no data"
                 break
 
             df = pd.DataFrame(data)
@@ -229,11 +238,13 @@ class CrimeAnalyzer:
                 break
 
         if not frames:
-            logger.error("API returned no usable data")
+            self.last_load_error = last_error or "API returned no usable data"
+            logger.error("API returned no usable data: %s", self.last_load_error)
             return False
 
         self.df = pd.concat(frames, ignore_index=True)
         logger.info("API data loaded: %s records", f"{len(self.df):,}")
+        self.last_load_error = None
         return True
 
     def load_data(self) -> bool:

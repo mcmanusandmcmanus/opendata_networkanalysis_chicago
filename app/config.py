@@ -23,7 +23,7 @@ API_URL = os.getenv(
     "API_URL",
     "https://data.cityofchicago.org/resource/ijzp-q8t2.json",  # Crimes - 2001 to Present
 )
-API_LIMIT = int(os.getenv("API_LIMIT", 200_000))  # max rows to pull per refresh (safe for ~2GB RAM)
+API_LIMIT = int(os.getenv("API_LIMIT", 200_000))  # max rows to pull per refresh (safe for ~2GB RAM; adjust down if needed)
 API_YEARS_BACK = int(os.getenv("API_YEARS_BACK", 4))  # limit by recent years for coverage (e.g., up to current year)
 APP_TOKEN = os.getenv("app_token") or os.getenv("APP_TOKEN")
 SECRET_KEY = os.getenv("secret_key") or os.getenv("SECRET_KEY")
