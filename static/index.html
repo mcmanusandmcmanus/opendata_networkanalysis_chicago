@@ -185,6 +185,36 @@
             </div>
           </div>
         </section>
+
+        <section id="insight-guides" style="margin-top:24px;">
+          <div class="grid" style="gap:16px;">
+            <div class="card">
+              <div class="section-title">How to Read This Dashboard</div>
+              <div style="font-size:13px; color:var(--muted); line-height:1.5;">
+                <p><strong>Timeframe & Coverage:</strong> Date Span and Total Loaded reflect what is actually loaded (API defaults to recent years via API_YEARS_BACK/API_LIMIT; local mode reflects the CSV on disk). Interpret trends within that window.</p>
+                <p><strong>Arrest Rate:</strong> Overall share of incidents with arrests; combine with crime-type filter to spot low-arrest pockets.</p>
+                <p><strong>Hotspots:</strong> Circles show spatial clusters; darker/red = denser. Align deployments where hotspots overlap concentrated beats (see Pareto note).</p>
+                <p><strong>Trends:</strong> Hourly pattern shows time-of-day peaks; Monthly trend shows last 12 months loaded. If Date Span is short, treat these as partial views.</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="section-title">Methodology (Summary & Hotspots)</div>
+              <div style="font-size:13px; color:var(--muted); line-height:1.5;">
+                <p><strong>Summary:</strong> Counts, arrest rate, hourly/monthly aggregates from the loaded dataset. Pareto uses beat counts to quantify concentration.</p>
+                <p><strong>Hotspots:</strong> Haversine DBSCAN (eps≈0.2 miles, min_samples=5) on lat/long; sample cap for performance. Radius shown is approximate spread.</p>
+                <p><strong>Scope Controls:</strong> DATA_SOURCE decides API vs local; API pulls respect API_LIMIT and API_YEARS_BACK env vars. Local mode uses the configured CSV path.</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="section-title">About the Data</div>
+              <div style="font-size:13px; color:var(--muted); line-height:1.5;">
+                <p>Source: Chicago crimes dataset (API by default; optionally local CSV). Fields include incident datetime (local), masked block, primary type, arrest/domestic flags, police geographies, and coordinates.</p>
+                <p>Assumptions: Dates parsed in local time; booleans normalized; rows missing date/coords are dropped. Blocks are coarse; lat/long used for clustering.</p>
+                <p>Limitations: If record counts look low, check Date Span and env limits. API throttling or missing credentials can reduce coverage; local mode depends on the CSV provided.</p>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   </div>
