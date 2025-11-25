@@ -144,6 +144,10 @@
               <span id="net-components">Components: --</span>
             </div>
           </div>
+          <div class="card" id="network-briefing" style="margin-bottom:16px; border-left: 4px solid var(--accent-strong); font-size:13px; color:var(--text);">
+            <div class="section-title">Network Briefing</div>
+            <div id="network-briefing-text" style="color:var(--muted); line-height:1.5;">Awaiting data...</div>
+          </div>
           <div class="grid two">
             <div class="card">
               <div class="section-title">Network Map</div>
@@ -196,6 +200,7 @@
         const res = await fetch("/api/summary");
         if (!res.ok) throw new Error("Summary fetch failed");
         const data = await res.json();
+        lastSummary = data;
         if (!data.total_incidents || data.total_incidents === 0) {
           setStatus("No data loaded. Check DATA_SOURCE, CRIME_CSV_PATH, or API credentials.", "warn");
         } else {
@@ -259,6 +264,7 @@
             }
           }
         });
+        renderBriefing();
       } catch (err) {
         console.error(err);
         setStatus("Summary unavailable. Verify backend health and data load.", "danger");
@@ -285,6 +291,9 @@
           .addTo(hotspotLayer);
       });
       hotspotLayer.addTo(mapHotspots);
+
+      // Refresh ops briefing using latest summary + hotspots count
+      renderBriefing();
     }
 
     async function loadNetwork() {
@@ -303,6 +312,7 @@
       document.getElementById("net-nodes").innerText = `Nodes: ${data.summary.connected_nodes ?? 0}`;
       document.getElementById("net-edges").innerText = `Edges: ${data.summary.edge_count ?? 0}`;
       document.getElementById("net-components").innerText = `Components: ${data.summary.components_count ?? 0}`;
+      renderNetworkBriefing(type, data.summary);
 
       if (networkLayer) networkLayer.remove();
       networkLayer = L.layerGroup();
@@ -352,6 +362,45 @@
       if (document.getElementById("view-network").style.display !== "none") {
         loadNetwork();
       }
+    }
+
+    // --- Briefings ---
+    let lastSummary = null;
+    function renderBriefing() {
+      if (!lastSummary) return;
+      const span = `${lastSummary.date_range.start} → ${lastSummary.date_range.end}`;
+      const arrest = (lastSummary.arrest_rate * 100).toFixed(1);
+      const pareto = lastSummary.pareto_concentration || {};
+      const conc = pareto.top_20_percent_holds
+        ? `Top 20% of beats hold ${pareto.top_20_percent_holds}% of incidents; ${pareto.beats_for_50_percent}% of beats cover 50% of incidents.`
+        : "Concentration metrics not available.";
+      const topTypes = Object.entries(lastSummary.top_types || {}).slice(0, 4).map(([k, v]) => `${k} (${v.toLocaleString()})`).join(", ");
+      const hotspots = document.getElementById("kpi-hotspots").innerText || "--";
+      const text = `Ops snapshot: ${lastSummary.total_incidents.toLocaleString()} incidents (${span}); arrest rate ${arrest}%. ${conc} Top categories: ${topTypes || "n/a"}. Active hotspots: ${hotspots}. Focus deployments where hotspots overlap high-concentration beats.`;
+
+      let briefingCard = document.getElementById("status-briefing-card");
+      if (!briefingCard) {
+        const section = document.querySelector("#view-dashboard .cards");
+        const card = document.createElement("div");
+        card.className = "card";
+        card.id = "status-briefing-card";
+        card.innerHTML = `<div class="kpi-label">Ops Briefing</div><div id="briefing-text" style="margin-top:8px; line-height:1.5; color:var(--muted); font-size:13px;"></div>`;
+        section.appendChild(card);
+      }
+      const textNode = document.getElementById("briefing-text");
+      if (textNode) textNode.innerText = text;
+    }
+
+    function renderNetworkBriefing(crimeType, summary) {
+      const nodes = summary.connected_nodes ?? 0;
+      const edges = summary.edge_count ?? 0;
+      const comps = summary.components_count ?? 0;
+      const largest = summary.largest_component_size ?? 0;
+      const msg = comps
+        ? `${crimeType}: ${comps} series detected; largest links ${largest} incidents. ${nodes} linked incidents via ${edges} edges. Prioritize the largest series geography/time window for disruption; compare against hotspots for deployment.`
+        : `${crimeType}: no connected series detected. Monitor for emerging clusters.`;
+      const el = document.getElementById("network-briefing-text");
+      if (el) el.innerText = msg;
     }
   </script>
 </body>
