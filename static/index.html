@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chicago Intel | Offline Ops</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet.css" />
+  <script src="/static/vendor/leaflet.js"></script>
+  <script src="/static/vendor/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0b1121;
+      --panel: #101827;
+      --accent: #3b82f6;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --border: #1f2937;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --success: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+    .layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+    .sidebar { background: #0f172a; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 16px; gap: 20px; }
+    .brand { font-weight: 800; letter-spacing: 0.1em; }
+    .tag { color: var(--muted); font-size: 12px; }
+    .nav button { width: 100%; padding: 12px; border: 1px solid var(--border); background: #111827; color: var(--muted); border-radius: 10px; cursor: pointer; font-weight: 600; text-align: left; }
+    .nav button.active { background: #1e293b; color: var(--accent); border-color: #334155; }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border); background: #0f172a; position: sticky; top: 0; z-index: 5; }
+    main { padding: 20px 24px 40px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .kpi-label { font-size: 12px; color: var(--muted); text-transform: uppercase; }
+    .kpi-value { font-size: 26px; font-weight: 800; margin-top: 6px; }
+    .grid { display: grid; gap: 16px; }
+    .grid.two { grid-template-columns: 2fr 1fr; }
+    .map { width: 100%; height: 520px; border-radius: 14px; overflow: hidden; }
+    .section-title { font-size: 14px; color: var(--muted); margin-bottom: 8px; font-weight: 700; letter-spacing: 0.03em; }
+    select { background: #0b1224; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    .network-meta { display: flex; gap: 16px; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; font-size: 13px; color: var(--muted); }
+    .list { display: grid; gap: 10px; max-height: 540px; overflow-y: auto; padding-right: 4px; }
+    .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); background: #111827; color: var(--text); }
+    .status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--success); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); display: inline-block; }
+    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } .sidebar { display: none; } header { position: relative; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div>
+        <div class="brand">INTEL OPS</div>
+        <div class="tag">Air-gapped | Offline-first</div>
+      </div>
+      <div class="nav">
+        <button id="btn-dashboard" class="active" onclick="setView('dashboard')">Dashboard</button>
+        <button id="btn-network" onclick="setView('network')">Network Analysis</button>
+      </div>
+      <div class="status"><span class="dot"></span>Offline ready</div>
+    </aside>
+    <div style="display:flex; flex-direction:column; min-height:100vh;">
+      <header>
+        <div>
+          <div style="font-weight:700;">Operations Center</div>
+          <div style="color:var(--muted); font-size:12px;">Chicago crime insights (local CSV)</div>
+        </div>
+        <div>
+          <select id="crime-select" onchange="refreshView()">
+            <option value="ALL">All Crimes</option>
+            <option value="ROBBERY" selected>Robbery</option>
+            <option value="MOTOR VEHICLE THEFT">Motor Vehicle Theft</option>
+            <option value="BURGLARY">Burglary</option>
+            <option value="WEAPONS VIOLATION">Weapons Violation</option>
+          </select>
+        </div>
+      </header>
+
+      <main>
+        <section id="view-dashboard">
+          <div class="cards">
+            <div class="card">
+              <div class="kpi-label">Total Loaded</div>
+              <div class="kpi-value" id="kpi-total">--</div>
+            </div>
+            <div class="card">
+              <div class="kpi-label">Arrest Rate</div>
+              <div class="kpi-value" id="kpi-arrest">--%</div>
+            </div>
+            <div class="card">
+              <div class="kpi-label">Active Hotspots</div>
+              <div class="kpi-value" id="kpi-hotspots">--</div>
+            </div>
+          </div>
+
+          <div class="grid two" style="margin-top:20px;">
+            <div class="card">
+              <div class="section-title">Hotspots</div>
+              <div id="map-hotspots" class="map"></div>
+            </div>
+            <div class="grid" style="grid-template-rows: 1fr;">
+              <div class="card" style="min-height:320px;">
+                <div class="section-title">Hourly Pattern</div>
+                <canvas id="chart-hourly" height="220"></canvas>
+              </div>
+              <div class="card">
+                <div class="section-title">Pareto (Beat Concentration)</div>
+                <div id="pareto" style="font-size:13px; color:var(--muted);">--</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-network" style="display:none;">
+          <div class="card" style="margin-bottom:16px; border-left: 4px solid var(--accent);">
+            <div style="font-weight:700; margin-bottom:6px;">Spatiotemporal Linkage</div>
+            <div style="font-size:13px; color:var(--muted);">Incidents within <strong>0.5 miles</strong> and <strong>3 days</strong>.</div>
+            <div class="network-meta" style="margin-top:10px;">
+              <span id="net-nodes">Nodes: --</span>
+              <span id="net-edges">Edges: --</span>
+              <span id="net-components">Components: --</span>
+            </div>
+          </div>
+          <div class="grid two">
+            <div class="card">
+              <div class="section-title">Network Map</div>
+              <div id="map-network" class="map"></div>
+            </div>
+            <div class="card">
+              <div class="section-title">Top Series</div>
+              <div id="network-list" class="list"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+    const MAP_OPTS = { maxZoom: 18, attribution: "© OpenStreetMap" };
+
+    let mapHotspots, mapNetwork, hourlyChart;
+    let hotspotLayer, networkLayer;
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      mapHotspots = L.map("map-hotspots").setView([41.8781, -87.6298], 11);
+      L.tileLayer(TILE_URL, MAP_OPTS).addTo(mapHotspots);
+
+      mapNetwork = L.map("map-network").setView([41.8781, -87.6298], 11);
+      L.tileLayer(TILE_URL, MAP_OPTS).addTo(mapNetwork);
+
+      await loadSummary();
+      await loadHotspots();
+    });
+
+    async function loadSummary() {
+      try {
+        const res = await fetch("/api/summary");
+        if (!res.ok) throw new Error("Summary fetch failed");
+        const data = await res.json();
+
+        document.getElementById("kpi-total").innerText = data.total_incidents.toLocaleString();
+        document.getElementById("kpi-arrest").innerText = (data.arrest_rate * 100).toFixed(1) + "%";
+        const pareto = data.pareto_concentration || {};
+        document.getElementById("pareto").innerText = pareto.top_20_percent_holds
+          ? `Top 20% of beats hold ${pareto.top_20_percent_holds}% of crime. Beats covering 50%: ${pareto.beats_for_50_percent}% (${pareto.total_active_beats} active beats).`
+          : "Not enough data to compute.";
+
+        const labels = Object.keys(data.hourly_counts).map(h => `${h}:00`);
+        const values = Object.values(data.hourly_counts);
+        if (hourlyChart) hourlyChart.destroy();
+        hourlyChart = new Chart(document.getElementById("chart-hourly"), {
+          type: "bar",
+          data: { labels, datasets: [{ label: "Incidents", data: values, backgroundColor: "#3b82f6", borderRadius: 4 }] },
+          options: {
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: "#94a3b8" }, grid: { display: false } },
+              y: { ticks: { color: "#94a3b8" }, grid: { color: "#1f2937" } }
+            }
+          }
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function loadHotspots() {
+      const type = document.getElementById("crime-select").value;
+      const res = await fetch(`/api/hotspots?crime_type=${encodeURIComponent(type)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      document.getElementById("kpi-hotspots").innerText = data.length;
+      if (hotspotLayer) hotspotLayer.remove();
+      hotspotLayer = L.layerGroup();
+
+      data.forEach(h => {
+        const color = h.count > 100 ? "#ef4444" : h.count > 20 ? "#f59e0b" : "#3b82f6";
+        L.circle([h.center_lat, h.center_lon], { radius: h.radius_approx_ft / 3.28, color, fillColor: color, fillOpacity: 0.4 })
+          .bindPopup(`<strong>${h.count} events</strong><br>${h.crime_type}`)
+          .addTo(hotspotLayer);
+      });
+      hotspotLayer.addTo(mapHotspots);
+    }
+
+    async function loadNetwork() {
+      const type = document.getElementById("crime-select").value;
+      const list = document.getElementById("network-list");
+      list.innerHTML = "<div style='color:var(--muted);'>Running analysis...</div>";
+
+      const res = await fetch(`/api/network?crime_type=${encodeURIComponent(type)}`);
+      if (!res.ok) {
+        list.innerHTML = "<div style='color:var(--danger);'>Network unavailable.</div>";
+        return;
+      }
+      const data = await res.json();
+
+      document.getElementById("net-nodes").innerText = `Nodes: ${data.summary.connected_nodes ?? 0}`;
+      document.getElementById("net-edges").innerText = `Edges: ${data.summary.edge_count ?? 0}`;
+      document.getElementById("net-components").innerText = `Components: ${data.summary.components_count ?? 0}`;
+
+      if (networkLayer) networkLayer.remove();
+      networkLayer = L.layerGroup();
+
+      const nodes = {};
+      data.nodes.forEach(n => { nodes[n.id] = n; });
+      data.edges.forEach(e => {
+        const a = nodes[e.source]; const b = nodes[e.target];
+        if (a && b) {
+          L.polyline([[a.lat, a.lng], [b.lat, b.lng]], { color: "#3b82f6", weight: 1, opacity: 0.5 }).addTo(networkLayer);
+        }
+      });
+      data.nodes.forEach(n => {
+        L.circleMarker([n.lat, n.lng], { radius: 4, color: "#fff", fillColor: "#ef4444", fillOpacity: 0.85, weight: 1 })
+          .bindPopup(`<strong>${n.date}</strong><br>${n.desc || ""}`)
+          .addTo(networkLayer);
+      });
+      networkLayer.addTo(mapNetwork);
+
+      list.innerHTML = "";
+      if (!data.summary.components_count) {
+        list.innerHTML = "<div style='color:var(--muted);'>No connected series found.</div>";
+        return;
+      }
+      const item = document.createElement("div");
+      item.className = "pill";
+      item.innerText = `Largest series size: ${data.summary.largest_component_size} events`;
+      list.appendChild(item);
+    }
+
+    function setView(view) {
+      document.getElementById("view-dashboard").style.display = view === "dashboard" ? "block" : "none";
+      document.getElementById("view-network").style.display = view === "network" ? "block" : "none";
+      document.getElementById("btn-dashboard").classList.toggle("active", view === "dashboard");
+      document.getElementById("btn-network").classList.toggle("active", view === "network");
+      setTimeout(() => {
+        mapHotspots.invalidateSize();
+        mapNetwork.invalidateSize();
+      }, 200);
+      if (view === "network") {
+        loadNetwork();
+      }
+    }
+
+    function refreshView() {
+      loadHotspots();
+      if (document.getElementById("view-network").style.display !== "none") {
+        loadNetwork();
+      }
+    }
+  </script>
+</body>
+</html>
