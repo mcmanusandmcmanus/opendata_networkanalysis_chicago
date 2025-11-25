@@ -15,6 +15,19 @@ DATA_PATH = os.getenv(
     str(BASE_DIR / "data" / "chicago_crime_odp_2022_202511.csv"),
 )
 
+# Data source selection: "local" (CSV) or "api"
+DATA_SOURCE = os.getenv("DATA_SOURCE", "local").lower()
+
+# API configuration (for Socrata/City of Chicago crimes endpoint)
+API_URL = os.getenv(
+    "API_URL",
+    "https://data.cityofchicago.org/resource/ijzp-q8t2.json",  # Crimes - 2001 to Present
+)
+API_LIMIT = int(os.getenv("API_LIMIT", 100_000))  # max rows to pull per refresh
+API_YEARS_BACK = int(os.getenv("API_YEARS_BACK", 3))  # limit by recent years for speed
+APP_TOKEN = os.getenv("app_token")
+SECRET_KEY = os.getenv("secret_key")
+
 # Analysis defaults
 SPATIAL_RADIUS_MILES = float(os.getenv("SPATIAL_RADIUS_MILES", 0.5))
 TEMPORAL_WINDOW_DAYS = int(os.getenv("TEMPORAL_WINDOW_DAYS", 3))

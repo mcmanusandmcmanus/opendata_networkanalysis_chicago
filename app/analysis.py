@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import networkx as nx
 import numpy as np
 import pandas as pd
+import requests
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import BallTree
 
@@ -21,6 +22,7 @@ class CrimeAnalyzer:
         self.df: Optional[pd.DataFrame] = None
         self.cache: Dict[str, Any] = {}
         self._lock = Lock()
+        self.data_source = config.DATA_SOURCE
 
         # Tunable defaults
         self.spatial_radius_miles = config.SPATIAL_RADIUS_MILES
@@ -102,26 +104,137 @@ class CrimeAnalyzer:
 
         return chunks
 
-    def load_data(self) -> bool:
+    def _load_from_csv(self) -> bool:
         if not os.path.exists(self.csv_path):
             logger.error("CSV not found at %s", self.csv_path)
             return False
+        logger.info("Loading dataset from %s", self.csv_path)
+        chunks = self._load_chunks()
+        if not chunks:
+            logger.error("No data loaded; chunks are empty.")
+            return False
+        self.df = pd.concat(chunks, ignore_index=True)
+        logger.info("Data loaded: %s records", f"{len(self.df):,}")
+        return True
 
-        with self._lock:
-            logger.info("Loading dataset from %s", self.csv_path)
+    def _load_from_api(self) -> bool:
+        logger.info("Loading dataset from API: %s", config.API_URL)
+        headers = {}
+        if config.APP_TOKEN:
+            headers["X-App-Token"] = config.APP_TOKEN
+        if config.SECRET_KEY:
+            headers["Authorization"] = f"Bearer {config.SECRET_KEY}"
+
+        # Limit to recent years for performance
+        now_year = datetime.utcnow().year
+        start_year = now_year - config.API_YEARS_BACK + 1
+        where_clause = f"year >= {start_year}"
+
+        limit = min(config.API_LIMIT, 1_000_000)
+        batch_size = 50_000
+        frames: List[pd.DataFrame] = []
+        offset = 0
+
+        field_map = {
+            "id": "ID",
+            "case_number": "Case Number",
+            "date": "Date",
+            "block": "Block",
+            "iucr": "IUCR",
+            "primary_type": "Primary Type",
+            "description": "Description",
+            "location_description": "Location Description",
+            "arrest": "Arrest",
+            "domestic": "Domestic",
+            "beat": "Beat",
+            "district": "District",
+            "ward": "Ward",
+            "community_area": "Community Area",
+            "fbi_code": "FBI Code",
+            "x_coordinate": "X Coordinate",
+            "y_coordinate": "Y Coordinate",
+            "year": "Year",
+            "updated_on": "Updated On",
+            "latitude": "Latitude",
+            "longitude": "Longitude",
+            "location": "Location",
+        }
+
+        while offset < limit:
+            params = {
+                "$limit": batch_size,
+                "$offset": offset,
+                "$where": where_clause,
+            }
             try:
-                chunks = self._load_chunks()
-                if not chunks:
-                    logger.error("No data loaded; chunks are empty.")
-                    return False
-                self.df = pd.concat(chunks, ignore_index=True)
-                self.cache = {}
-                logger.info("Data loaded: %s records", f"{len(self.df):,}")
-                return True
+                resp = requests.get(config.API_URL, headers=headers, params=params, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
             except Exception as exc:
-                logger.exception("Failed to load data: %s", exc)
-                self.df = None
-                return False
+                logger.exception("API fetch failed at offset %s: %s", offset, exc)
+                break
+
+            if not data:
+                break
+
+            df = pd.DataFrame(data)
+            if df.empty:
+                break
+
+            # Rename to internal schema
+            df = df.rename(columns=field_map)
+            # Keep only known columns
+            df = df[[v for v in field_map.values() if v in df.columns]]
+            # Parse datetimes
+            if "Date" in df.columns:
+                df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+            if "Updated On" in df.columns:
+                df["Updated On"] = pd.to_datetime(df["Updated On"], errors="coerce")
+            # Coerce numerics
+            for col in ["Latitude", "Longitude", "X Coordinate", "Y Coordinate"]:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+            # Booleans
+            for col in ["Arrest", "Domestic"]:
+                if col in df.columns:
+                    df[col] = df[col].astype("string").str.lower().map({"true": True, "false": False})
+
+            df = df.dropna(subset=["Date", "Latitude", "Longitude"])
+            if not df.empty:
+                frames.append(df)
+
+            offset += batch_size
+            if offset >= limit:
+                break
+
+        if not frames:
+            logger.error("API returned no usable data")
+            return False
+
+        self.df = pd.concat(frames, ignore_index=True)
+        logger.info("API data loaded: %s records", f"{len(self.df):,}")
+        return True
+
+    def load_data(self) -> bool:
+        with self._lock:
+            self.cache = {}
+            if self.data_source == "api":
+                ok = self._load_from_api()
+                if ok:
+                    self._post_load_vector_ops()
+                    return True
+                logger.warning("API load failed; falling back to CSV")
+            ok = self._load_from_csv()
+            if ok:
+                self._post_load_vector_ops()
+            return ok
+
+    def _post_load_vector_ops(self):
+        if self.df is None or self.df.empty:
+            return
+        self.df["hour"] = self.df["Date"].dt.hour.astype("int8")
+        self.df["lat_rad"] = np.radians(self.df["Latitude"]).astype("float32")
+        self.df["lon_rad"] = np.radians(self.df["Longitude"]).astype("float32")
 
     # --- Stats ---
     def _require_data(self) -> bool:
@@ -309,4 +422,3 @@ class CrimeAnalyzer:
 
 # Singleton instance
 analyzer = CrimeAnalyzer(config.DATA_PATH)
-
