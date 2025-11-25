@@ -1,7 +1,13 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment from common locations
+load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR.parent / "Secure.env")
 
 # Environment variables
 DATA_PATH = os.getenv(
